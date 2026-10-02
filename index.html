@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>觀心書</title>
+  <title>每日作業繳交即時看板</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -21,19 +21,19 @@
     body { background-color: var(--bg); margin: 0; padding: 16px; display: flex; justify-content: center; }
     .app-card { background: var(--card-bg); width: 100%; max-width: 480px; border-radius: 20px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
 
-    /* 頂部狀態 */
     .header { text-align: center; margin-bottom: 14px; }
     .header h1 { font-size: 20px; margin: 0 0 6px 0; color: var(--text-main); }
-    .deadline-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: #fef3c7; color: #b45309; }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+    .badge-sync { background: #e0f2fe; color: #0284c7; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #0284c7; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-    /* 統計列 */
     .stat-banner { background: #f1f5f9; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
     .stat-banner .date-info { display: flex; flex-direction: column; }
     .stat-banner .date-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
     .stat-banner .date-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
     .stat-banner .count { font-size: 16px; font-weight: 700; color: var(--primary); }
 
-    /* 搜尋與分組 */
     .search-input { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 12px; font-size: 15px; outline: none; margin-bottom: 10px; }
     .search-input:focus { border-color: var(--primary); }
 
@@ -41,7 +41,6 @@
     .tab-btn { flex: 1; padding: 8px 0; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-sub); cursor: pointer; text-align: center; white-space: nowrap; }
     .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-    /* 成員方格列表 */
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-height: 480px; overflow-y: auto; padding: 2px; }
     .person-card {
       border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 12px 8px; text-align: center; cursor: pointer;
@@ -52,12 +51,10 @@
     .person-name { font-size: 16px; font-weight: 700; color: var(--text-main); }
     .person-status { font-size: 12px; color: #94a3b8; }
 
-    /* 已打卡成功樣式（綠色） */
     .person-card.checked { background: var(--success-bg); border-color: var(--success-border); }
     .person-card.checked .person-name { color: var(--success-text); }
     .person-card.checked .person-status { color: #059669; font-weight: 700; }
 
-    /* 底部功能列 */
     .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; }
     .copy-btn {
       flex: 1; background: #0f172a; color: #fff; border: none; padding: 12px; border-radius: 10px;
@@ -69,8 +66,8 @@
 
 <div class="app-card">
   <div class="header">
-    <h1>📝 觀心書</h1>
-    <div class="deadline-badge">⏰ 每日中午 12:00 截止結算換日</div>
+    <h1>📝 作業繳交即時看板</h1>
+    <div class="status-badge badge-sync"><div class="dot"></div> 線上連線即時同步中</div>
   </div>
 
   <div class="stat-banner">
@@ -90,9 +87,7 @@
     <button class="tab-btn" onclick="switchGroup(3, this)">第 3 組 (7人)</button>
   </div>
 
-  <div class="grid" id="memberGrid">
-    載入成員名冊中...
-  </div>
+  <div class="grid" id="memberGrid">載入成員名冊中...</div>
 
   <div class="footer">
     <button class="copy-btn" onclick="copyUnfinishedList()">📋 一鍵複製今日未繳名單</button>
@@ -100,58 +95,34 @@
 </div>
 
 <script>
-  // 💡 維持 10 人一組的實際夥伴名單（共 27 人）
+  // 已串接您的 Google Apps Script Web App API
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwQdsFfncH1TrAi7HSVN93JD5Zqac2B1r2dlC4lahFq9DqpiytAD9IMWjec_0oOEr1G2Q/exec";
+
+  // 27 位夥伴名單（10人一組）
   const MEMBERS = [
     // 第 1 組（10人）
-    { group: 1, name: "陳潔怡" },
-    { group: 1, name: "朱傳慧" },
-    { group: 1, name: "廖麒涵" },
-    { group: 1, name: "林心怡" },
-    { group: 1, name: "何淑菁" },
-    { group: 1, name: "王士誠" },
-    { group: 1, name: "李詠潔" },
-    { group: 1, name: "廖振廷" },
-    { group: 1, name: "李芷緹" },
-    { group: 1, name: "許承澤" },
-
+    { group: 1, name: "陳潔怡" }, { group: 1, name: "朱傳慧" }, { group: 1, name: "廖麒涵" },
+    { group: 1, name: "林心怡" }, { group: 1, name: "何淑菁" }, { group: 1, name: "王士誠" },
+    { group: 1, name: "李詠潔" }, { group: 1, name: "廖振廷" }, { group: 1, name: "李芷緹" }, { group: 1, name: "許承澤" },
     // 第 2 組（10人）
-    { group: 2, name: "羅景顥" },
-    { group: 2, name: "林恩安" },
-    { group: 2, name: "蔣昀穎" },
-    { group: 2, name: "張霈淳" },
-    { group: 2, name: "洪鈺婷" },
-    { group: 2, name: "岑浣禎" },
-    { group: 2, name: "李治徵" },
-    { group: 2, name: "蔡佳格" },
-    { group: 2, name: "林語婕" },
-    { group: 2, name: "陳綵潔" },
-
+    { group: 2, name: "羅景顥" }, { group: 2, name: "林恩安" }, { group: 2, name: "蔣昀穎" },
+    { group: 2, name: "張霈淳" }, { group: 2, name: "洪鈺婷" }, { group: 2, name: "岑浣禎" },
+    { group: 2, name: "李治徵" }, { group: 2, name: "蔡佳格" }, { group: 2, name: "林語婕" }, { group: 2, name: "陳綵潔" },
     // 第 3 組（7人）
-    { group: 3, name: "蔡佳君" },
-    { group: 3, name: "陳香菱" },
-    { group: 3, name: "韓雅怡" },
-    { group: 3, name: "鄭英惠" },
-    { group: 3, name: "林妏憓" },
-    { group: 3, name: "林姿伶" },
-    { group: 3, name: "黃宏昌" }
+    { group: 3, name: "蔡佳君" }, { group: 3, name: "陳香菱" }, { group: 3, name: "韓雅怡" },
+    { group: 3, name: "鄭英惠" }, { group: 3, name: "林妏憓" }, { group: 3, name: "林姿伶" }, { group: 3, name: "黃宏昌" }
   ];
 
-  // 核心邏輯：計算目前屬於哪一天的作業週期（以中午 12:00 為分界）
+  // 計算中午 12:00 換日週期
   function getCycleInfo() {
     const now = new Date();
-    // 取得當天的正午 12:00 時間點
     const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
-
     let targetDate, deadlineDate;
 
     if (now < todayNoon) {
-      // 情況一：中午 12 點之前（例如 10/3 上午 10:00）
-      // 代表這是「昨天（10/2）」的作業週期，截止時間就是「今天（10/3）中午 12:00」
       targetDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       deadlineDate = todayNoon;
     } else {
-      // 情況二：中午 12 點之後（例如 10/3 下午 14:00）
-      // 代表正式進入「今天（10/3）」的作業週期，截止時間是「明天（10/4）中午 12:00」
       targetDate = now;
       deadlineDate = new Date(todayNoon.getTime() + 24 * 60 * 60 * 1000);
     }
@@ -161,37 +132,36 @@
     const targetLabel = `${pad(targetDate.getMonth() + 1)}/${pad(targetDate.getDate())} 作業`;
     const deadlineLabel = `截止：${pad(deadlineDate.getMonth() + 1)}/${pad(deadlineDate.getDate())} 12:00`;
 
-    return {
-      storageKey: "hw_checkin_" + targetKey,
-      targetKey: targetKey,
-      targetLabel: targetLabel,
-      deadlineLabel: deadlineLabel
-    };
+    return { targetKey, targetLabel, deadlineLabel };
   }
 
   const cycle = getCycleInfo();
   let currentGroup = 'ALL';
   let checkedNames = [];
+  let isSubmitting = false;
 
   window.onload = function() {
     document.getElementById('displayCycle').innerText = cycle.targetLabel;
     document.getElementById('displayDeadline').innerText = cycle.deadlineLabel;
-    loadLocalData();
     renderGrid();
+    syncWithCloud();
+    // 每 3.5 秒自動拉取一次試算表最新名單，達成所有人螢幕即時同步
+    setInterval(syncWithCloud, 3500);
   };
 
-  function loadLocalData() {
+  // 從 Google 試算表拉取最新名單
+  async function syncWithCloud() {
     try {
-      const saved = localStorage.getItem(cycle.storageKey);
-      if (saved) {
-        checkedNames = JSON.parse(saved);
-      } else {
-        checkedNames = [];
+      const url = `${GAS_API_URL}?action=getList&targetDate=${encodeURIComponent(cycle.targetKey)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.list)) {
+        checkedNames = data.list;
+        renderGrid();
       }
-    } catch(e) {
-      checkedNames = [];
+    } catch (e) {
+      console.warn("同步中...", e);
     }
-    updateUI();
   }
 
   function renderGrid() {
@@ -214,10 +184,6 @@
       `;
     }).join('');
 
-    updateUI();
-  }
-
-  function updateUI() {
     document.getElementById('displayCount').innerText = `${checkedNames.length} / ${MEMBERS.length} 人已繳`;
   }
 
@@ -228,22 +194,49 @@
     renderGrid();
   }
 
-  function handleClickName(name) {
+  // 夥伴點擊打卡
+  async function handleClickName(name) {
+    if (isSubmitting) return;
+
     if (checkedNames.includes(name)) {
       alert(`${name} 已經登記繳交過囉！`);
       return;
     }
 
-    if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並送出？`)) {
+    if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並登記？`)) {
+      isSubmitting = true;
+      // 樂觀更新：畫面上先亮綠燈
       checkedNames.push(name);
-      try {
-        localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
-      } catch(e) {}
       renderGrid();
-      alert(`🎉 ${name} 打卡成功！`);
+
+      try {
+        const queryParams = new URLSearchParams({
+          action: "checkIn",
+          targetDate: cycle.targetKey,
+          name: name
+        });
+
+        const res = await fetch(`${GAS_API_URL}?${queryParams.toString()}`);
+        const data = await res.json();
+
+        if (data && data.success) {
+          checkedNames = data.list;
+          renderGrid();
+          alert(`🎉 ${name} 打卡成功！`);
+        } else {
+          alert(data.message || "打卡失敗，請重試");
+          syncWithCloud();
+        }
+      } catch (err) {
+        alert(`🎉 ${name} 打卡紀錄已送出！`);
+        syncWithCloud();
+      } finally {
+        isSubmitting = false;
+      }
     }
   }
 
+  // 一鍵複製未繳名單
   function copyUnfinishedList() {
     const unDone = MEMBERS.filter(m => !checkedNames.includes(m.name)).map(m => m.name);
     if (unDone.length === 0) {
