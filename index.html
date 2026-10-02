@@ -24,14 +24,14 @@
     /* 頂部狀態 */
     .header { text-align: center; margin-bottom: 14px; }
     .header h1 { font-size: 20px; margin: 0 0 6px 0; color: var(--text-main); }
-    .sync-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; background: #e0f2fe; color: #0284c7; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #0284c7; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .deadline-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; background: #fef3c7; color: #b45309; }
 
     /* 統計列 */
     .stat-banner { background: #f1f5f9; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    .stat-banner .date { font-size: 14px; font-weight: 600; color: var(--text-main); }
-    .stat-banner .count { font-size: 15px; font-weight: 700; color: var(--primary); }
+    .stat-banner .date-info { display: flex; flex-direction: column; }
+    .stat-banner .date-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
+    .stat-banner .date-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+    .stat-banner .count { font-size: 16px; font-weight: 700; color: var(--primary); }
 
     /* 搜尋與分組 */
     .search-input { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 12px; font-size: 15px; outline: none; margin-bottom: 10px; }
@@ -70,11 +70,14 @@
 <div class="app-card">
   <div class="header">
     <h1>📝 作業繳交即時看板</h1>
-    <div class="sync-badge"><div class="dot"></div> 全員線上即時同步中</div>
+    <div class="deadline-badge">⏰ 每日中午 12:00 截止結算換日</div>
   </div>
 
   <div class="stat-banner">
-    <span class="date" id="displayDate">----/--/--</span>
+    <div class="date-info">
+      <span class="date-title" id="displayCycle">載入中...</span>
+      <span class="date-sub" id="displayDeadline"></span>
+    </div>
     <span class="count" id="displayCount">0 / 27 人已繳</span>
   </div>
 
@@ -133,30 +136,53 @@
     { group: 3, name: "黃宏昌" }
   ];
 
-  // 取得台灣時間 YYYY-MM-DD，每天自動更換儲存 Key（跨日自動重置歸零）
-  function getTodayKey() {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  // 核心邏輯：計算目前屬於哪一天的作業週期（以中午 12:00 為分界）
+  function getCycleInfo() {
+    const now = new Date();
+    // 取得當天的正午 12:00 時間點
+    const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+
+    let targetDate, deadlineDate;
+
+    if (now < todayNoon) {
+      // 情況一：中午 12 點之前（例如 10/3 上午 10:00）
+      // 代表這是「昨天（10/2）」的作業週期，截止時間就是「今天（10/3）中午 12:00」
+      targetDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      deadlineDate = todayNoon;
+    } else {
+      // 情況二：中午 12 點之後（例如 10/3 下午 14:00）
+      // 代表正式進入「今天（10/3）」的作業週期，截止時間是「明天（10/4）中午 12:00」
+      targetDate = now;
+      deadlineDate = new Date(todayNoon.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const targetKey = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
+    const targetLabel = `${pad(targetDate.getMonth() + 1)}/${pad(targetDate.getDate())} 作業`;
+    const deadlineLabel = `截止：${pad(deadlineDate.getMonth() + 1)}/${pad(deadlineDate.getDate())} 12:00`;
+
+    return {
+      storageKey: "hw_checkin_" + targetKey,
+      targetKey: targetKey,
+      targetLabel: targetLabel,
+      deadlineLabel: deadlineLabel
+    };
   }
 
-  const TODAY_KEY = getTodayKey();
-  const STORAGE_KEY = "hw_checkin_" + TODAY_KEY;
-
+  const cycle = getCycleInfo();
   let currentGroup = 'ALL';
   let checkedNames = [];
 
   window.onload = function() {
-    document.getElementById('displayDate').innerText = TODAY_KEY;
+    document.getElementById('displayCycle').innerText = cycle.targetLabel;
+    document.getElementById('displayDeadline').innerText = cycle.deadlineLabel;
     loadLocalData();
     renderGrid();
   };
 
   function loadLocalData() {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(cycle.storageKey);
       if (saved) {
         checkedNames = JSON.parse(saved);
       } else {
@@ -204,27 +230,27 @@
 
   function handleClickName(name) {
     if (checkedNames.includes(name)) {
-      alert(`${name} 今天已經登記過作業繳交囉！`);
+      alert(`${name} 已經登記繳交過囉！`);
       return;
     }
 
-    if (confirm(`確認「${name}」已完成今日作業並送出？`)) {
+    if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並送出？`)) {
       checkedNames.push(name);
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(checkedNames));
+        localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
       } catch(e) {}
       renderGrid();
-      alert(`🎉 ${name} 今日打卡成功！`);
+      alert(`🎉 ${name} 打卡成功！`);
     }
   }
 
   function copyUnfinishedList() {
     const unDone = MEMBERS.filter(m => !checkedNames.includes(m.name)).map(m => m.name);
     if (unDone.length === 0) {
-      alert("🎉 太棒了！今日 27 位夥伴全員已繳齊作業！");
+      alert(`🎉 太棒了！【${cycle.targetLabel}】27 位夥伴全員已繳齊！`);
       return;
     }
-    const text = `📢 【${TODAY_KEY} 作業繳交提醒】\n今日尚未完成夥伴（共 ${unDone.length} 人）：\n` + unDone.join('、');
+    const text = `📢 【${cycle.targetLabel} 繳交提醒】（${cycle.deadlineLabel}）\n尚未完成夥伴（共 ${unDone.length} 人）：\n` + unDone.join('、');
     navigator.clipboard.writeText(text).then(() => {
       alert("已成功複製未繳名單！可直接貼到 LINE 群組提醒。");
     });
