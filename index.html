@@ -1,87 +1,266 @@
-function doGet(e) {
-  const lock = LockService.getScriptLock();
-  lock.tryLock(10000);
-
-  try {
-    const params = e.parameter || {};
-    const action = params.action;
-    const targetDateStr = params.targetDate; // 例如 2026-10-02
-    const name = params.name;
-    const callback = params.callback; // JSONP 回調
-
-    // 固定綁定您的試算表
-    const ss = SpreadsheetApp.openById("16DSFiIll9pAbiczNoCW79EU3gjMcLzDCnHlpqhTVDAs");
-    let result = { success: false, message: "無動作" };
-
-    if (action === "getList") {
-      const list = getCheckedList(ss, targetDateStr);
-      result = { success: true, list: list };
-    } else if (action === "checkIn") {
-      const monthKey = targetDateStr.substring(0, 7);
-      const sheet = getOrCreateMonthSheet(ss, monthKey);
-      const list = getCheckedList(ss, targetDateStr);
-
-      if (!list.includes(name)) {
-        const now = new Date();
-        const timeStamp = Utilities.formatDate(now, "GMT+8", "yyyy-MM-dd HH:mm:ss");
-        sheet.appendRow([timeStamp, targetDateStr, name, "✅ 準時合格"]);
-        list.push(name);
-      }
-      result = { success: true, message: "打卡成功", list: list };
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>每日作業繳交即時看板</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success-bg: #ecfdf5;
+      --success-border: #10b981;
+      --success-text: #065f46;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-sub: #64748b;
     }
 
-    const jsonString = JSON.stringify(result);
-    if (callback) {
-      return ContentService.createTextOutput(callback + "(" + jsonString + ")")
-        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--bg); margin: 0; padding: 16px; display: flex; justify-content: center; }
+    .app-card { background: var(--card-bg); width: 100%; max-width: 480px; border-radius: 20px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+
+    .header { text-align: center; margin-bottom: 14px; }
+    .header h1 { font-size: 20px; margin: 0 0 6px 0; color: var(--text-main); }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+    .badge-sync { background: #e0f2fe; color: #0284c7; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #0284c7; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .stat-banner { background: #f1f5f9; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .stat-banner .date-info { display: flex; flex-direction: column; }
+    .stat-banner .date-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
+    .stat-banner .date-sub { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+    .stat-banner .count { font-size: 16px; font-weight: 700; color: var(--primary); }
+
+    .search-input { width: 100%; padding: 12px 14px; border: 1.5px solid #cbd5e1; border-radius: 12px; font-size: 15px; outline: none; margin-bottom: 10px; }
+    .search-input:focus { border-color: var(--primary); }
+
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 2px; }
+    .tab-btn { flex: 1; padding: 8px 0; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-sub); cursor: pointer; text-align: center; white-space: nowrap; }
+    .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-height: 480px; overflow-y: auto; padding: 2px; }
+    .person-card {
+      border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 12px 8px; text-align: center; cursor: pointer;
+      display: flex; flex-direction: column; justify-content: center; gap: 4px; transition: all 0.15s ease;
+      background: #ffffff;
+    }
+    .person-card:active { transform: scale(0.97); }
+    .person-name { font-size: 16px; font-weight: 700; color: var(--text-main); }
+    .person-status { font-size: 12px; color: #94a3b8; }
+
+    .person-card.checked { background: var(--success-bg); border-color: var(--success-border); }
+    .person-card.checked .person-name { color: var(--success-text); }
+    .person-card.checked .person-status { color: #059669; font-weight: 700; }
+
+    .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; }
+    .copy-btn {
+      flex: 1; background: #0f172a; color: #fff; border: none; padding: 12px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer; text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-card">
+  <div class="header">
+    <h1>📝 作業繳交即時看板</h1>
+    <div class="status-badge badge-sync"><div class="dot"></div> 線上連線即時同步中</div>
+  </div>
+
+  <div class="stat-banner">
+    <div class="date-info">
+      <span class="date-title" id="displayCycle">載入中...</span>
+      <span class="date-sub" id="displayDeadline"></span>
+    </div>
+    <span class="count" id="displayCount">0 / 27 人已繳</span>
+  </div>
+
+  <input type="text" class="search-input" id="searchBox" placeholder="🔍 輸入姓名快速打卡..." oninput="renderGrid()">
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchGroup('ALL', this)">全部 (27)</button>
+    <button class="tab-btn" onclick="switchGroup(1, this)">第 1 組 (10人)</button>
+    <button class="tab-btn" onclick="switchGroup(2, this)">第 2 組 (10人)</button>
+    <button class="tab-btn" onclick="switchGroup(3, this)">第 3 組 (7人)</button>
+  </div>
+
+  <div class="grid" id="memberGrid">載入成員名冊中...</div>
+
+  <div class="footer">
+    <button class="copy-btn" onclick="copyUnfinishedList()">📋 一鍵複製今日未繳名單</button>
+  </div>
+</div>
+
+<script>
+  // 已更新為您最新的 Google Apps Script 網址
+  const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwQdsFfncH1TrAi7HSVN93JD5Zqac2B1r2dlC4lahFq9DqpiytAD9IMWjec_0oOEr1G2Q/exec";
+
+  // 27 位夥伴名單（10人一組）
+  const MEMBERS = [
+    // 第 1 組（10人）
+    { group: 1, name: "陳潔怡" }, { group: 1, name: "朱傳慧" }, { group: 1, name: "廖麒涵" },
+    { group: 1, name: "林心怡" }, { group: 1, name: "何淑菁" }, { group: 1, name: "王士誠" },
+    { group: 1, name: "李詠潔" }, { group: 1, name: "廖振廷" }, { group: 1, name: "李芷緹" }, { group: 1, name: "許承澤" },
+    // 第 2 組（10人）
+    { group: 2, name: "羅景顥" }, { group: 2, name: "林恩安" }, { group: 2, name: "蔣昀穎" },
+    { group: 2, name: "張霈淳" }, { group: 2, name: "洪鈺婷" }, { group: 2, name: "岑浣禎" },
+    { group: 2, name: "李治徵" }, { group: 2, name: "蔡佳格" }, { group: 2, name: "林語婕" }, { group: 2, name: "陳綵潔" },
+    // 第 3 組（7人）
+    { group: 3, name: "蔡佳君" }, { group: 3, name: "陳香菱" }, { group: 3, name: "韓雅怡" },
+    { group: 3, name: "鄭英惠" }, { group: 3, name: "林妏憓" }, { group: 3, name: "林姿伶" }, { group: 3, name: "黃宏昌" }
+  ];
+
+  // 計算中午 12:00 換日週期
+  function getCycleInfo() {
+    const now = new Date();
+    const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    let targetDate, deadlineDate;
+
+    if (now < todayNoon) {
+      targetDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      deadlineDate = todayNoon;
     } else {
-      return ContentService.createTextOutput(jsonString)
-        .setMimeType(ContentService.MimeType.JSON);
+      targetDate = now;
+      deadlineDate = new Date(todayNoon.getTime() + 24 * 60 * 60 * 1000);
     }
-  } catch (error) {
-    const errRes = JSON.stringify({ success: false, message: error.toString() });
-    if (e.parameter && e.parameter.callback) {
-      return ContentService.createTextOutput(e.parameter.callback + "(" + errRes + ")")
-        .setMimeType(ContentService.MimeType.JAVASCRIPT);
-    }
-    return ContentService.createTextOutput(errRes).setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    lock.releaseLock();
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const targetKey = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
+    const targetLabel = `${pad(targetDate.getMonth() + 1)}/${pad(targetDate.getDate())} 作業`;
+    const deadlineLabel = `截止：${pad(deadlineDate.getMonth() + 1)}/${pad(deadlineDate.getDate())} 12:00`;
+
+    return { targetKey, targetLabel, deadlineLabel, storageKey: "hw_checked_" + targetKey };
   }
-}
 
-function getOrCreateMonthSheet(ss, monthKey) {
-  let sheet = ss.getSheetByName(monthKey);
-  if (!sheet) {
-    sheet = ss.insertSheet(monthKey);
-    sheet.appendRow(["打卡時間", "歸屬作業日期", "成員姓名", "繳交狀態"]);
-    sheet.getRange(1, 1, 1, 4).setFontWeight("bold").setBackground("#f1f5f9");
-    sheet.setFrozenRows(1);
+  const cycle = getCycleInfo();
+  let currentGroup = 'ALL';
+  let checkedNames = [];
+
+  // 初始化：第一時間讀取本地 localStorage，確保重新整理絕不消失
+  window.onload = function() {
+    document.getElementById('displayCycle').innerText = cycle.targetLabel;
+    document.getElementById('displayDeadline').innerText = cycle.deadlineLabel;
+    
+    try {
+      const localSaved = localStorage.getItem(cycle.storageKey);
+      if (localSaved) {
+        checkedNames = JSON.parse(localSaved);
+      }
+    } catch(e) {}
+
+    renderGrid();
+    syncWithCloud();
+    setInterval(syncWithCloud, 3500);
+  };
+
+  // JSONP 跨域通訊
+  function callGAS(params, callback) {
+    const cbName = "gas_cb_" + Math.round(100000 * Math.random());
+    window[cbName] = function(data) {
+      try {
+        delete window[cbName];
+        document.body.removeChild(script);
+      } catch(e) {}
+      if (callback) callback(data);
+    };
+
+    const query = new URLSearchParams(params);
+    query.set("callback", cbName);
+
+    const script = document.createElement("script");
+    script.src = `${GAS_API_URL}?${query.toString()}`;
+    document.body.appendChild(script);
   }
-  return sheet;
-}
 
-function getCheckedList(ss, targetDateStr) {
-  if (!targetDateStr) return [];
-  const monthKey = targetDateStr.substring(0, 7);
-  const sheet = ss.getSheetByName(monthKey);
-  if (!sheet) return [];
+  function syncWithCloud() {
+    callGAS({ action: "getList", targetDate: cycle.targetKey }, function(res) {
+      if (res && res.success && Array.isArray(res.list)) {
+        const merged = Array.from(new Set([...checkedNames, ...res.list]));
+        checkedNames = merged;
+        try {
+          localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
+        } catch(e) {}
+        renderGrid();
+      }
+    });
+  }
 
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return [];
+  function renderGrid() {
+    const grid = document.getElementById('memberGrid');
+    const query = document.getElementById('searchBox').value.trim().toLowerCase();
 
-  const data = sheet.getRange(2, 2, lastRow - 1, 2).getValues();
-  const checked = [];
-  data.forEach(row => {
-    let rowDate = row[0];
-    if (rowDate instanceof Date) {
-      rowDate = Utilities.formatDate(rowDate, "GMT+8", "yyyy-MM-dd");
+    const filtered = MEMBERS.filter(m => {
+      const matchG = (currentGroup === 'ALL' || m.group === currentGroup);
+      const matchS = m.name.toLowerCase().includes(query);
+      return matchG && matchS;
+    });
+
+    grid.innerHTML = filtered.map(m => {
+      const isDone = checkedNames.includes(m.name);
+      return `
+        <div class="person-card ${isDone ? 'checked' : ''}" onclick="handleClickName('${m.name}')">
+          <span class="person-name">${m.name}</span>
+          <span class="person-status">${isDone ? '✅ 已繳交' : '點擊回報已繳'}</span>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('displayCount').innerText = `${checkedNames.length} / ${MEMBERS.length} 人已繳`;
+  }
+
+  function switchGroup(g, btn) {
+    currentGroup = g;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderGrid();
+  }
+
+  function handleClickName(name) {
+    if (checkedNames.includes(name)) {
+      alert(`${name} 已經登記繳交過囉！`);
+      return;
     }
-    if (String(rowDate) === targetDateStr && !checked.includes(row[1])) {
-      checked.push(row[1]);
+
+    if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並登記？`)) {
+      // 1. 本地立即儲存並亮綠燈（重新整理不會消失）
+      if (!checkedNames.includes(name)) {
+        checkedNames.push(name);
+        try {
+          localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
+        } catch(e) {}
+      }
+      renderGrid();
+
+      // 2. 透過 JSONP 穿透寫入 Google 試算表
+      callGAS({ action: "checkIn", targetDate: cycle.targetKey, name: name }, function(res) {
+        if (res && res.success && res.list) {
+          checkedNames = Array.from(new Set([...checkedNames, ...res.list]));
+          try {
+            localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
+          } catch(e) {}
+          renderGrid();
+        }
+      });
+
+      alert(`🎉 ${name} 打卡成功！`);
     }
-  });
-  return checked;
-}
+  }
+
+  function copyUnfinishedList() {
+    const unDone = MEMBERS.filter(m => !checkedNames.includes(m.name)).map(m => m.name);
+    if (unDone.length === 0) {
+      alert(`🎉 太棒了！【${cycle.targetLabel}】全員已繳齊！`);
+      return;
+    }
+    const text = `📢 【${cycle.targetLabel} 繳交提醒】（${cycle.deadlineLabel}）\n尚未完成夥伴（共 ${unDone.length} 人）：\n` + unDone.join('、');
+    navigator.clipboard.writeText(text).then(() => {
+      alert("已成功複製未繳名單！可直接貼到 LINE 群組提醒。");
+    });
+  }
+</script>
+
 </body>
 </html>
