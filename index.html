@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>觀心書 ｜ 作業繳交即時看板</title>
+  <title>觀心書 ｜ 上傳即時看板</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
@@ -216,7 +216,7 @@
       gap: 3px;
     }
 
-    /* 打卡成功態樣（質樸鼠尾草綠） */
+    /* 已上傳狀態（質樸鼠尾草綠） */
     .person-card.checked { 
       background: var(--success-bg); 
       border-color: var(--success-border); 
@@ -340,7 +340,7 @@
 
     const pad = (n) => String(n).padStart(2, '0');
     const targetKey = `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
-    const targetLabel = `${pad(targetDate.getMonth() + 1)}/${pad(targetDate.getDate())} 作業`;
+    const targetLabel = `${pad(targetDate.getMonth() + 1)}/${pad(targetDate.getDate())} 觀心書`;
     const deadlineLabel = `截止：${pad(deadlineDate.getMonth() + 1)}/${pad(deadlineDate.getDate())} 12:00`;
 
     return { targetKey, targetLabel, deadlineLabel, storageKey: "hw_checked_" + targetKey };
@@ -424,7 +424,7 @@
       return;
     }
 
-    if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並登記？`)) {
+    if (confirm(`確認「${name}」已上傳【${cycle.targetLabel}】並登記？`)) {
       // 樂觀預先更新
       if (!checkedNames.includes(name)) {
         checkedNames.push(name);
