@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>觀心書繳交</title>
+  <title>每日作業繳交即時看板</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -66,7 +66,7 @@
 
 <div class="app-card">
   <div class="header">
-    <h1>📝 觀心書繳交</h1>
+    <h1>📝 作業繳交即時看板</h1>
     <div class="status-badge badge-sync"><div class="dot"></div> 線上連線即時同步中</div>
   </div>
 
@@ -95,10 +95,9 @@
 </div>
 
 <script>
-  // Google Apps Script 網頁應用程式網址
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwQdsFfncH1TrAi7HSVN93JD5Zqac2B1r2dlC4lahFq9DqpiytAD9IMWjec_0oOEr1G2Q/exec";
 
-  // 27 位夥伴名單（維持 10 人一組）
+  // 27 位夥伴名單（10人一組）
   const MEMBERS = [
     // 第 1 組（10人）
     { group: 1, name: "陳潔怡" }, { group: 1, name: "朱傳慧" }, { group: 1, name: "廖麒涵" },
@@ -143,7 +142,7 @@
     document.getElementById('displayCycle').innerText = cycle.targetLabel;
     document.getElementById('displayDeadline').innerText = cycle.deadlineLabel;
     
-    // 先載入本機暫存（避免白畫面）
+    // 1. 優先載入本地永久儲存，保證不閃爍白畫面
     try {
       const localSaved = localStorage.getItem(cycle.storageKey);
       if (localSaved) {
@@ -153,11 +152,11 @@
 
     renderGrid();
     syncWithCloud();
-    // 每 3.5 秒自動對齊雲端最新名冊
+    // 每 3.5 秒自動對齊雲端
     setInterval(syncWithCloud, 3500);
   };
 
-  // JSONP 呼叫：加入隨機時間戳記（&_t=）防止不同瀏覽器快取舊資料
+  // JSONP 跨域通訊
   function callGAS(params, callback) {
     const cbName = "gas_cb_" + Math.round(1000000 * Math.random());
     window[cbName] = function(data) {
@@ -177,11 +176,12 @@
     document.body.appendChild(script);
   }
 
-  // 從 Google 試算表強制同步
+  // 核心保護：雲端名單與本地名單「雙向合併」，絕不允許空白覆寫已打卡紀錄！
   function syncWithCloud() {
     callGAS({ action: "getList", targetDate: cycle.targetKey }, function(res) {
       if (res && res.success && Array.isArray(res.list)) {
-        checkedNames = res.list; // 直接以雲端試算表真實資料為準
+        const merged = Array.from(new Set([...checkedNames, ...res.list]));
+        checkedNames = merged;
         try {
           localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
         } catch(e) {}
@@ -227,7 +227,7 @@
     }
 
     if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並登記？`)) {
-      // 樂觀更新：畫面上先變綠
+      // 1. 本地立即存入並亮綠燈（重新整理永遠都在）
       if (!checkedNames.includes(name)) {
         checkedNames.push(name);
         try {
@@ -236,10 +236,10 @@
       }
       renderGrid();
 
-      // 送至 Google Apps Script 雲端
+      // 2. 雲端同步寫入 Google 試算表
       callGAS({ action: "checkIn", targetDate: cycle.targetKey, name: name }, function(res) {
         if (res && res.success && res.list) {
-          checkedNames = res.list;
+          checkedNames = Array.from(new Set([...checkedNames, ...res.list]));
           try {
             localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
           } catch(e) {}
