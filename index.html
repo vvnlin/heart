@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>觀心書</title>
+  <title>每日作業繳交即時看板</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -55,18 +55,23 @@
     .person-card.checked .person-name { color: var(--success-text); }
     .person-card.checked .person-status { color: #059669; font-weight: 700; }
 
-    .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; }
+    .footer { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 8px; }
     .copy-btn {
-      flex: 1; background: #0f172a; color: #fff; border: none; padding: 12px; border-radius: 10px;
+      width: 100%; background: #0f172a; color: #fff; border: none; padding: 12px; border-radius: 10px;
       font-size: 14px; font-weight: 600; cursor: pointer; text-align: center;
     }
+    .reset-btn {
+      width: 100%; background: transparent; color: #94a3b8; border: 1px dashed #cbd5e1; padding: 8px; border-radius: 10px;
+      font-size: 12px; cursor: pointer; text-align: center;
+    }
+    .reset-btn:hover { color: #ef4444; border-color: #fca5a5; }
   </style>
 </head>
 <body>
 
 <div class="app-card">
   <div class="header">
-    <h1>📝 觀心書</h1>
+    <h1>📝 作業繳交即時看板</h1>
     <div class="status-badge badge-sync"><div class="dot"></div> 線上連線即時同步中</div>
   </div>
 
@@ -91,13 +96,13 @@
 
   <div class="footer">
     <button class="copy-btn" onclick="copyUnfinishedList()">📋 一鍵複製今日未繳名單</button>
+    <button class="reset-btn" onclick="clearLocalCache()">🧹 清除本機快取（若試算表已刪除紀錄請按此）</button>
   </div>
 </div>
 
 <script>
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwQdsFfncH1TrAi7HSVN93JD5Zqac2B1r2dlC4lahFq9DqpiytAD9IMWjec_0oOEr1G2Q/exec";
 
-  // 27 位夥伴名單（10人一組）
   const MEMBERS = [
     // 第 1 組（10人）
     { group: 1, name: "陳潔怡" }, { group: 1, name: "朱傳慧" }, { group: 1, name: "廖麒涵" },
@@ -112,7 +117,6 @@
     { group: 3, name: "鄭英惠" }, { group: 3, name: "林妏憓" }, { group: 3, name: "林姿伶" }, { group: 3, name: "黃宏昌" }
   ];
 
-  // 計算中午 12:00 換日週期
   function getCycleInfo() {
     const now = new Date();
     const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
@@ -141,22 +145,11 @@
   window.onload = function() {
     document.getElementById('displayCycle').innerText = cycle.targetLabel;
     document.getElementById('displayDeadline').innerText = cycle.deadlineLabel;
-    
-    // 1. 優先載入本地永久儲存，保證不閃爍白畫面
-    try {
-      const localSaved = localStorage.getItem(cycle.storageKey);
-      if (localSaved) {
-        checkedNames = JSON.parse(localSaved);
-      }
-    } catch(e) {}
-
     renderGrid();
     syncWithCloud();
-    // 每 3.5 秒自動對齊雲端
     setInterval(syncWithCloud, 3500);
   };
 
-  // JSONP 跨域通訊
   function callGAS(params, callback) {
     const cbName = "gas_cb_" + Math.round(1000000 * Math.random());
     window[cbName] = function(data) {
@@ -169,22 +162,19 @@
 
     const query = new URLSearchParams(params);
     query.set("callback", cbName);
-    query.set("_t", Date.now()); // 防快取
+    query.set("_t", Date.now()); // 防止瀏覽器快取舊資料
 
     const script = document.createElement("script");
     script.src = `${GAS_API_URL}?${query.toString()}`;
     document.body.appendChild(script);
   }
 
-  // 核心保護：雲端名單與本地名單「雙向合併」，絕不允許空白覆寫已打卡紀錄！
+  // 💡 100% 依據試算表真實資料更新
   function syncWithCloud() {
     callGAS({ action: "getList", targetDate: cycle.targetKey }, function(res) {
       if (res && res.success && Array.isArray(res.list)) {
-        const merged = Array.from(new Set([...checkedNames, ...res.list]));
-        checkedNames = merged;
-        try {
-          localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
-        } catch(e) {}
+        checkedNames = res.list;
+        localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
         renderGrid();
       }
     });
@@ -227,22 +217,17 @@
     }
 
     if (confirm(`確認「${name}」已繳交【${cycle.targetLabel}】並登記？`)) {
-      // 1. 本地立即存入並亮綠燈（重新整理永遠都在）
+      // 畫面上先亮綠燈
       if (!checkedNames.includes(name)) {
         checkedNames.push(name);
-        try {
-          localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
-        } catch(e) {}
       }
       renderGrid();
 
-      // 2. 雲端同步寫入 Google 試算表
+      // 寫入 Google 試算表
       callGAS({ action: "checkIn", targetDate: cycle.targetKey, name: name }, function(res) {
         if (res && res.success && res.list) {
-          checkedNames = Array.from(new Set([...checkedNames, ...res.list]));
-          try {
-            localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
-          } catch(e) {}
+          checkedNames = res.list;
+          localStorage.setItem(cycle.storageKey, JSON.stringify(checkedNames));
           renderGrid();
         }
       });
@@ -261,6 +246,15 @@
     navigator.clipboard.writeText(text).then(() => {
       alert("已成功複製未繳名單！可直接貼到 LINE 群組提醒。");
     });
+  }
+
+  // 一鍵清空本地快取
+  function clearLocalCache() {
+    localStorage.clear();
+    checkedNames = [];
+    renderGrid();
+    syncWithCloud();
+    alert("已清空本機快取！畫面已與試算表重新同步。");
   }
 </script>
 
