@@ -41,7 +41,7 @@
     .tab-btn { flex: 1; padding: 8px 0; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text-sub); cursor: pointer; text-align: center; white-space: nowrap; }
     .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-    /* 40 人方格列表 */
+    /* 成員方格列表 */
     .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-height: 480px; overflow-y: auto; padding: 2px; }
     .person-card {
       border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 12px 8px; text-align: center; cursor: pointer;
@@ -75,17 +75,16 @@
 
   <div class="stat-banner">
     <span class="date" id="displayDate">----/--/--</span>
-    <span class="count" id="displayCount">0 / 40 人已繳</span>
+    <span class="count" id="displayCount">0 / 27 人已繳</span>
   </div>
 
   <input type="text" class="search-input" id="searchBox" placeholder="🔍 輸入姓名快速打卡..." oninput="renderGrid()">
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchGroup('ALL', this)">全部 (40)</button>
-    <button class="tab-btn" onclick="switchGroup(1, this)">第 1 組</button>
-    <button class="tab-btn" onclick="switchGroup(2, this)">第 2 組</button>
-    <button class="tab-btn" onclick="switchGroup(3, this)">第 3 組</button>
-    <button class="tab-btn" onclick="switchGroup(4, this)">第 4 組</button>
+    <button class="tab-btn active" onclick="switchGroup('ALL', this)">全部 (27)</button>
+    <button class="tab-btn" onclick="switchGroup(1, this)">第 1 組 (10人)</button>
+    <button class="tab-btn" onclick="switchGroup(2, this)">第 2 組 (10人)</button>
+    <button class="tab-btn" onclick="switchGroup(3, this)">第 3 組 (7人)</button>
   </div>
 
   <div class="grid" id="memberGrid">
@@ -98,19 +97,43 @@
 </div>
 
 <script>
-  // 💡 在此處放入你們 40 位成員名單（每 10 人一組）
+  // 💡 維持 10 人一組的實際夥伴名單（共 27 人）
   const MEMBERS = [
-    { group: 1, name: "夥伴01" }, { group: 1, name: "夥伴02" }, { group: 1, name: "夥伴03" }, { group: 1, name: "夥伴04" }, { group: 1, name: "夥伴05" },
-    { group: 1, name: "夥伴06" }, { group: 1, name: "夥伴07" }, { group: 1, name: "夥伴08" }, { group: 1, name: "夥伴09" }, { group: 1, name: "夥伴10" },
-    { group: 2, name: "夥伴11" }, { group: 2, name: "夥伴12" }, { group: 2, name: "夥伴13" }, { group: 2, name: "夥伴14" }, { group: 2, name: "夥伴15" },
-    { group: 2, name: "夥伴16" }, { group: 2, name: "夥伴17" }, { group: 2, name: "夥伴18" }, { group: 2, name: "夥伴19" }, { group: 2, name: "夥伴20" },
-    { group: 3, name: "夥伴21" }, { group: 3, name: "夥伴22" }, { group: 3, name: "夥伴23" }, { group: 3, name: "夥伴24" }, { group: 3, name: "夥伴25" },
-    { group: 3, name: "夥伴26" }, { group: 3, name: "夥伴27" }, { group: 3, name: "夥伴28" }, { group: 3, name: "夥伴29" }, { group: 3, name: "夥伴30" },
-    { group: 4, name: "夥伴31" }, { group: 4, name: "夥伴32" }, { group: 4, name: "夥伴33" }, { group: 4, name: "夥伴34" }, { group: 4, name: "夥伴35" },
-    { group: 4, name: "夥伴36" }, { group: 4, name: "夥伴37" }, { group: 4, name: "夥伴38" }, { group: 4, name: "夥伴39" }, { group: 4, name: "夥伴40" }
+    // 第 1 組（10人）
+    { group: 1, name: "陳潔怡" },
+    { group: 1, name: "朱傳慧" },
+    { group: 1, name: "廖麒涵" },
+    { group: 1, name: "林心怡" },
+    { group: 1, name: "何淑菁" },
+    { group: 1, name: "王士誠" },
+    { group: 1, name: "李詠潔" },
+    { group: 1, name: "廖振廷" },
+    { group: 1, name: "李芷緹" },
+    { group: 1, name: "許承澤" },
+
+    // 第 2 組（10人）
+    { group: 2, name: "羅景顥" },
+    { group: 2, name: "林恩安" },
+    { group: 2, name: "蔣昀穎" },
+    { group: 2, name: "張霈淳" },
+    { group: 2, name: "洪鈺婷" },
+    { group: 2, name: "岑浣禎" },
+    { group: 2, name: "李治徵" },
+    { group: 2, name: "蔡佳格" },
+    { group: 2, name: "林語婕" },
+    { group: 2, name: "陳綵潔" },
+
+    // 第 3 組（7人）
+    { group: 3, name: "蔡佳君" },
+    { group: 3, name: "陳香菱" },
+    { group: 3, name: "韓雅怡" },
+    { group: 3, name: "鄭英惠" },
+    { group: 3, name: "林妏憓" },
+    { group: 3, name: "林姿伶" },
+    { group: 3, name: "黃宏昌" }
   ];
 
-  // 取得台灣時間 YYYY-MM-DD，每天自動更換房間 Key（達到隔日自動歸零重啟）
+  // 取得台灣時間 YYYY-MM-DD，每天自動更換儲存 Key（跨日自動重置歸零）
   function getTodayKey() {
     const d = new Date();
     const year = d.getFullYear();
@@ -120,31 +143,29 @@
   }
 
   const TODAY_KEY = getTodayKey();
-  // 公開共享雲端 API 端點（以專屬前綴 + 日期 作為每日通道）
-  const SYNC_ROOM_ID = "homework_checkin_" + TODAY_KEY;
-  const CLOUD_API = `https://api.counterapi.dev/v1/${SYNC_ROOM_ID}`; // 可換成任意免費 KV 儲存庫如 CountAPI / JSONBin / Firebase
+  const STORAGE_KEY = "hw_checkin_" + TODAY_KEY;
 
   let currentGroup = 'ALL';
   let checkedNames = [];
 
   window.onload = function() {
     document.getElementById('displayDate').innerText = TODAY_KEY;
+    loadLocalData();
     renderGrid();
-    syncFromCloud();
-    // 每 3.5 秒自動拉取一次最新名單，達成所有人螢幕即時同步
-    setInterval(syncFromCloud, 3500);
   };
 
-  // 從雲端拉取今日已繳名單
-  async function syncFromCloud() {
+  function loadLocalData() {
     try {
-      // 讀取 localStorage 緩存 + 雲端同步
-      const saved = localStorage.getItem(SYNC_ROOM_ID);
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         checkedNames = JSON.parse(saved);
-        updateUI();
+      } else {
+        checkedNames = [];
       }
-    } catch(e) {}
+    } catch(e) {
+      checkedNames = [];
+    }
+    updateUI();
   }
 
   function renderGrid() {
@@ -181,7 +202,6 @@
     renderGrid();
   }
 
-  // 夥伴點擊打卡
   function handleClickName(name) {
     if (checkedNames.includes(name)) {
       alert(`${name} 今天已經登記過作業繳交囉！`);
@@ -190,17 +210,18 @@
 
     if (confirm(`確認「${name}」已完成今日作業並送出？`)) {
       checkedNames.push(name);
-      localStorage.setItem(SYNC_ROOM_ID, JSON.stringify(checkedNames));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(checkedNames));
+      } catch(e) {}
       renderGrid();
-      alert(`🎉 ${name} 打卡成功！`);
+      alert(`🎉 ${name} 今日打卡成功！`);
     }
   }
 
-  // 一鍵複製催繳名單
   function copyUnfinishedList() {
     const unDone = MEMBERS.filter(m => !checkedNames.includes(m.name)).map(m => m.name);
     if (unDone.length === 0) {
-      alert("🎉 今日 40 位夥伴全員已繳齊作業！");
+      alert("🎉 太棒了！今日 27 位夥伴全員已繳齊作業！");
       return;
     }
     const text = `📢 【${TODAY_KEY} 作業繳交提醒】\n今日尚未完成夥伴（共 ${unDone.length} 人）：\n` + unDone.join('、');
